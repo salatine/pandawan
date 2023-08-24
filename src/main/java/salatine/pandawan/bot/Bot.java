@@ -30,7 +30,7 @@ public class Bot extends ListenerAdapter {
     final static String DANBOORU_API_KEY = System.getenv("DANBOORU_API_KEY");
     final static boolean USE_GUILD_COMMANDS = Optional.ofNullable(System.getenv("USE_GUILD_COMMANDS"))
             .map((value) -> value.equals("true"))
-            .orElseGet(() -> false);
+            .orElse(false);
     final static Optional<Long> GUILD_ID = Optional.ofNullable(System.getenv("GUILD_ID"))
             .map(Long::parseLong);
     final String DANBOORU_URL = "https://danbooru.donmai.us/posts.json?";
