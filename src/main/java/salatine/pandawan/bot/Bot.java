@@ -3,6 +3,8 @@ package salatine.pandawan.bot;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.interactions.commands.Command;
+import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.utils.FileUpload;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
@@ -26,19 +28,38 @@ public class Bot extends ListenerAdapter {
     final static String DISCORD_TOKEN = System.getenv("DISCORD_TOKEN");
     final static String DANBOORU_LOGIN = System.getenv("DANBOORU_LOGIN");
     final static String DANBOORU_API_KEY = System.getenv("DANBOORU_API_KEY");
+    final static boolean USE_GUILD_COMMANDS = Optional.ofNullable(System.getenv("USE_GUILD_COMMANDS"))
+            .map((value) -> value.equals("true"))
+            .orElse(false);
+    final static Optional<Long> GUILD_ID = Optional.ofNullable(System.getenv("GUILD_ID"))
+            .map(Long::parseLong);
     final String DANBOORU_URL = "https://danbooru.donmai.us/posts.json?";
-    public static void main(String[] args){
+    public static void main(String[] args) throws InterruptedException {
         JDA jda = JDABuilder.createDefault(DISCORD_TOKEN)
             .addEventListeners(new Bot())
             .setActivity(Activity.playing("pandinha"))
             .build();
-        
-        jda.updateCommands().addCommands(
+
+        var commands = new CommandData[] {
             Commands.slash("ping", "calculate ping of the bot"),
             Commands.slash("kokomi", "get sangonomiya kokomi images from danbooru"),
             Commands.slash("wave", "get a waving image from danbooru"),
-            Commands.slash("miku", "get a hatsune miku image from danbooru")
-        ).queue();
+            Commands.slash("miku", "get hatsune miku images from danbooru"),
+            Commands.slash("sophie", "get sophie images from danbooru")
+        };
+
+        if (USE_GUILD_COMMANDS && GUILD_ID.isPresent()) {
+            var guild = jda.awaitReady().getGuildById(GUILD_ID.get());
+
+            if (guild == null) {
+                throw new RuntimeException("could not find guild with id " + GUILD_ID.get());
+            }
+
+            guild.updateCommands().addCommands(commands).queue();
+        } else {
+            jda.updateCommands().addCommands(commands).queue();
+        }
+        
     }
 
     @Override
@@ -60,6 +81,10 @@ public class Bot extends ListenerAdapter {
 
             case "miku":
                 sendRandomDanbooruImageWithTags(event, List.of("hatsune_miku", "rating:general"), List.of("solo"));
+                break;
+
+            case "sophie":
+                sendRandomDanbooruImageWithTags(event, List.of("sophia_(p5s)", "rating:general"));
                 break;
         }
     }
