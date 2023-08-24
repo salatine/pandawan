@@ -20,6 +20,7 @@ import java.io.InputStream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.InterruptedException;
+import java.util.*;
 
 public class Bot extends ListenerAdapter {
     final static String DISCORD_TOKEN = System.getenv("DISCORD_TOKEN");
@@ -34,7 +35,8 @@ public class Bot extends ListenerAdapter {
         
         jda.updateCommands().addCommands(
             Commands.slash("ping", "calculate ping of the bot"),
-            Commands.slash("kokomi", "get sangonomiya kokomi images from danbooru")
+            Commands.slash("kokomi", "get sangonomiya kokomi images from danbooru"),
+            Commands.slash("wave", "get a waving image from danbooru")
         ).queue();
     }
 
@@ -48,51 +50,97 @@ public class Bot extends ListenerAdapter {
                 break;
 
             case "kokomi":
-                event.deferReply().queue();
-                String[] tags = {"sangonomiya_kokomi", "rating:general", "order:random"};
-                try {
-                    ByteBuffer[] images = getDanbooruImages(tags, 1);
-                    ByteBuffer randomImageBytes = images[(int) (Math.random() * images.length)];
-                    InputStream randomImage  = new ByteArrayInputStream(randomImageBytes.array());
-                    FileUpload fileUpload = FileUpload.fromData(randomImage, "file.png");
-                    MessageEmbed embed = new EmbedBuilder()
-                        .setDescription("")
-                        .setImage("attachment://file.png")
-                        .build();
-                        
-                    event.getHook().sendMessageEmbeds(embed).addFiles(fileUpload).queue();
-                    fileUpload.close();
-                    
-                } catch (DanbooruApiException | IOException e) {
-                    event.getHook().sendMessage("There was an error while fetching the image");
-                    e.printStackTrace();
-                }
+                sendRandomDanbooruImageWithTags(event, List.of("sangonomiya_kokomi", "rating:general"));
+                break;
 
-            default:
+            case "wave":
+                sendRandomDanbooruImageWithTags(event, List.of("waving", "is:gif", "rating:general"), List.of("animated"));
                 break;
         }
     }
 
-    public ByteBuffer[] getDanbooruImages(String[] tags, int limit) throws DanbooruApiException {
-        String formattedTags = String.join("+", tags);
-        HttpClient client = HttpClient.newHttpClient();
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(DANBOORU_URL + "tags=" + formattedTags + "&login=" + DANBOORU_LOGIN + "&api_key=" + DANBOORU_API_KEY + "&limit=" + limit))
-            .build();
+    private void sendRandomDanbooruImageWithTags(SlashCommandInteractionEvent event, Collection<String> tags) {
+        sendRandomDanbooruImageWithTags(event, tags, List.of());
+    }
+
+    private void sendRandomDanbooruImageWithTags(SlashCommandInteractionEvent event, Collection<String> tags, Collection<String> additionalFilters) {
+        event.deferReply().queue();
+
+        var tagsPlusRandomOrder = new ArrayList<>(tags);
+        tagsPlusRandomOrder.add("order:random");
+
         try {
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            JSONArray posts = new JSONArray(response.body());
-            ByteBuffer[] images = new ByteBuffer[posts.length()];
+            var images = getDanbooruImages(tagsPlusRandomOrder, additionalFilters, 1);
+            var randomImage = images.get((int) (Math.random() * images.size()));
+            var randomImageInputStream  = new ByteArrayInputStream(randomImage.contents().array());
+
+            var fileUpload = FileUpload.fromData(randomImageInputStream, "file." + randomImage.extension());
+            var embed = new EmbedBuilder()
+                    .setDescription("")
+                    .setImage("attachment://file." + randomImage.extension())
+                    .build();
+
+            event.getHook().sendMessageEmbeds(embed).addFiles(fileUpload).queue();
+            fileUpload.close();
+        } catch (DanbooruApiException | IOException e) {
+            event.getHook().sendMessage("There was an error while fetching the image").queue();
+            e.printStackTrace();
+        }
+    }
+
+    private List<DanbooruImage> getDanbooruImages(
+        Collection<String> tags,
+        Collection<String> additionalTags,
+        int limit
+    ) throws DanbooruApiException {
+        var formattedTags = String.join("+", tags);
+        var client = HttpClient.newHttpClient();
+
+        var postsToBeRead = 50;
+        var request = HttpRequest.newBuilder()
+            .uri(URI.create(DANBOORU_URL + "tags=" + formattedTags + "&login=" + DANBOORU_LOGIN + "&api_key=" + DANBOORU_API_KEY + "&limit=" + postsToBeRead))
+            .build();
+
+        try {
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            var posts = new JSONArray(response.body());
+            var images = new ArrayList<DanbooruImage>();
+            var remainingImages = limit;
+
             for (int i = 0; i < posts.length(); i++) {
-                JSONObject post = posts.getJSONObject(i);
-                URL fileURL = new URL(post.getString("file_url"));
-                byte[] image = fileURL.openStream().readAllBytes();
-                images[i] = ByteBuffer.wrap(image);
+                var post = posts.getJSONObject(i);
+                var postTags = Set.of(post.getString("tag_string").split(" "));
+
+                if (!postTags.containsAll(additionalTags)) {
+                    continue;
+                }
+
+                var fileURL = new URL(post.getString("file_url"));
+
+                try (var stream = fileURL.openStream()) {
+                    var extension = getExtension(fileURL.getPath());
+                    var contents = ByteBuffer.wrap(stream.readAllBytes());
+
+                    var image = new DanbooruImage(extension, contents);
+
+                    images.add(image);
+                    remainingImages--;
+
+                    if (remainingImages == 0) {
+                        break;
+                    }
+                }
             }
 
-        return images;
-        } catch (IOException | InterruptedException e) {
+            return images;
+        } catch (Exception e) {
             throw new DanbooruApiException("error trying to download image", e);
         }
+    }
+
+    private String getExtension(String path) {
+        var parts = path.split("\\.");
+
+        return parts[parts.length - 1];
     }
 }
