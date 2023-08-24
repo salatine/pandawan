@@ -36,7 +36,8 @@ public class Bot extends ListenerAdapter {
         jda.updateCommands().addCommands(
             Commands.slash("ping", "calculate ping of the bot"),
             Commands.slash("kokomi", "get sangonomiya kokomi images from danbooru"),
-            Commands.slash("wave", "get a waving image from danbooru")
+            Commands.slash("wave", "get a waving image from danbooru"),
+            Commands.slash("miku", "get a hatsune miku image from danbooru")
         ).queue();
     }
 
@@ -55,6 +56,10 @@ public class Bot extends ListenerAdapter {
 
             case "wave":
                 sendRandomDanbooruImageWithTags(event, List.of("waving", "is:gif", "rating:general"), List.of("animated"));
+                break;
+
+            case "miku":
+                sendRandomDanbooruImageWithTags(event, List.of("hatsune_miku", "rating:general"), List.of("solo"));
                 break;
         }
     }
