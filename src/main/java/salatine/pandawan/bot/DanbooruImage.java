@@ -1,7 +1,7 @@
-package salatine.pandawan.bot;
+package salatine.pandawan.bot                                                     ;
 
-import java.nio.ByteBuffer;
+import java.nio.ByteBuffer                                                        ;
 
-public record DanbooruImage(String extension, ByteBuffer contents) {
+public record DanbooruImage(String extension, ByteBuffer contents)                {
 
-}
+                                                                                  }
